@@ -2,7 +2,7 @@
 from mmcv.cnn.bricks import ConvModule
 
 from mmdet3d.ops import DGCNNFPModule
-from ..builder import HEADS
+from mmdet.models import HEADS
 from .decode_head import Base3DDecodeHead
 
 

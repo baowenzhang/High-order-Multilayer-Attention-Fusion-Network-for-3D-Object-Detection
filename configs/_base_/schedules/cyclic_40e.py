@@ -13,7 +13,7 @@ optimizer_config = dict(grad_clip=dict(max_norm=10, norm_type=2))
 # We implement them in mmcv, for more details, please refer to
 # https://github.com/open-mmlab/mmcv/blob/f48241a65aebfe07db122e9db320c31b685dc674/mmcv/runner/hooks/lr_updater.py#L327  # noqa
 # https://github.com/open-mmlab/mmcv/blob/f48241a65aebfe07db122e9db320c31b685dc674/mmcv/runner/hooks/momentum_updater.py#L130  # noqa
-lr_config = dict(
+lr_config = dict(#学习率衰减
     policy='cyclic',
     target_ratio=(10, 1e-4),
     cyclic_times=1,

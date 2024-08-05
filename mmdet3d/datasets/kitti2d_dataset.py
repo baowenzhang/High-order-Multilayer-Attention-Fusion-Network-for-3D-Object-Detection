@@ -2,8 +2,7 @@
 import mmcv
 import numpy as np
 
-from mmdet.datasets import CustomDataset
-from .builder import DATASETS
+from mmdet.datasets import DATASETS, CustomDataset
 
 
 @DATASETS.register_module()

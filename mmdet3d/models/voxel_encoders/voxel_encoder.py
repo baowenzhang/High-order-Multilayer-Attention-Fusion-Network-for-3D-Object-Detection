@@ -273,7 +273,7 @@ class DynamicVFE(nn.Module):
             if (i == len(self.vfe_layers) - 1 and self.fusion_layer is not None
                     and img_feats is not None):
                 point_feats = self.fusion_layer(img_feats, points, point_feats,
-                                                img_metas)
+                                                img_metas) #跳转到融合特征point_fusion
             voxel_feats, voxel_coors = self.vfe_scatter(point_feats, coors)
             if i != len(self.vfe_layers) - 1:
                 # need to concat voxel feats if it is not the last vfe

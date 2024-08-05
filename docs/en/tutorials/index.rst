@@ -8,5 +8,3 @@
    customize_runtime.md
    coord_sys_tutorial.md
    backends_support.md
-   model_deployment.md
-   pure_point_cloud_dataset.md

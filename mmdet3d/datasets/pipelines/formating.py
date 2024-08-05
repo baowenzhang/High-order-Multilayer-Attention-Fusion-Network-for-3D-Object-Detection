@@ -4,8 +4,10 @@ from mmcv.parallel import DataContainer as DC
 
 from mmdet3d.core.bbox import BaseInstance3DBoxes
 from mmdet3d.core.points import BasePoints
+from mmdet.datasets.builder import PIPELINES
 from mmdet.datasets.pipelines import to_tensor
-from ..builder import PIPELINES
+
+PIPELINES._module_dict.pop('DefaultFormatBundle')
 
 
 @PIPELINES.register_module()

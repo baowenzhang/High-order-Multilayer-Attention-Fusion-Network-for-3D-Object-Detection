@@ -3,16 +3,16 @@ import copy
 
 import torch
 from mmcv.cnn import ConvModule, build_conv_layer
+from mmcv.ops import nms_bev as nms_gpu
 from mmcv.runner import BaseModule, force_fp32
 from torch import nn
 
 from mmdet3d.core import (circle_nms, draw_heatmap_gaussian, gaussian_radius,
                           xywhr2xyxyr)
-from mmdet3d.core.post_processing import nms_bev
 from mmdet3d.models import builder
+from mmdet3d.models.builder import HEADS, build_loss
 from mmdet3d.models.utils import clip_sigmoid
 from mmdet.core import build_bbox_coder, multi_apply
-from ..builder import HEADS, build_loss
 
 
 @HEADS.register_module()
@@ -327,8 +327,6 @@ class CenterHead(BaseModule):
                 in_channels=share_conv_channel, heads=heads, num_cls=num_cls)
             self.task_heads.append(builder.build_head(separate_head))
 
-        self.with_velocity = 'vel' in common_heads.keys()
-
     def forward_single(self, x):
         """Forward function for CenterPoint.
 
@@ -492,12 +490,8 @@ class CenterHead(BaseModule):
                 (len(self.class_names[idx]), feature_map_size[1],
                  feature_map_size[0]))
 
-            if self.with_velocity:
-                anno_box = gt_bboxes_3d.new_zeros((max_objs, 10),
-                                                  dtype=torch.float32)
-            else:
-                anno_box = gt_bboxes_3d.new_zeros((max_objs, 8),
-                                                  dtype=torch.float32)
+            anno_box = gt_bboxes_3d.new_zeros((max_objs, 10),
+                                              dtype=torch.float32)
 
             ind = gt_labels_3d.new_zeros((max_objs), dtype=torch.int64)
             mask = gt_bboxes_3d.new_zeros((max_objs), dtype=torch.uint8)
@@ -554,27 +548,19 @@ class CenterHead(BaseModule):
                     ind[new_idx] = y * feature_map_size[0] + x
                     mask[new_idx] = 1
                     # TODO: support other outdoor dataset
+                    vx, vy = task_boxes[idx][k][7:]
                     rot = task_boxes[idx][k][6]
                     box_dim = task_boxes[idx][k][3:6]
                     if self.norm_bbox:
                         box_dim = box_dim.log()
-                    if self.with_velocity:
-                        vx, vy = task_boxes[idx][k][7:]
-                        anno_box[new_idx] = torch.cat([
-                            center - torch.tensor([x, y], device=device),
-                            z.unsqueeze(0), box_dim,
-                            torch.sin(rot).unsqueeze(0),
-                            torch.cos(rot).unsqueeze(0),
-                            vx.unsqueeze(0),
-                            vy.unsqueeze(0)
-                        ])
-                    else:
-                        anno_box[new_idx] = torch.cat([
-                            center - torch.tensor([x, y], device=device),
-                            z.unsqueeze(0), box_dim,
-                            torch.sin(rot).unsqueeze(0),
-                            torch.cos(rot).unsqueeze(0)
-                        ])
+                    anno_box[new_idx] = torch.cat([
+                        center - torch.tensor([x, y], device=device),
+                        z.unsqueeze(0), box_dim,
+                        torch.sin(rot).unsqueeze(0),
+                        torch.cos(rot).unsqueeze(0),
+                        vx.unsqueeze(0),
+                        vy.unsqueeze(0)
+                    ])
 
             heatmaps.append(heatmap)
             anno_boxes.append(anno_box)
@@ -608,17 +594,11 @@ class CenterHead(BaseModule):
                 avg_factor=max(num_pos, 1))
             target_box = anno_boxes[task_id]
             # reconstruct the anno_box from multiple reg heads
-            if self.with_velocity:
-                preds_dict[0]['anno_box'] = torch.cat(
-                    (preds_dict[0]['reg'], preds_dict[0]['height'],
-                     preds_dict[0]['dim'], preds_dict[0]['rot'],
-                     preds_dict[0]['vel']),
-                    dim=1)
-            else:
-                preds_dict[0]['anno_box'] = torch.cat(
-                    (preds_dict[0]['reg'], preds_dict[0]['height'],
-                     preds_dict[0]['dim'], preds_dict[0]['rot']),
-                    dim=1)
+            preds_dict[0]['anno_box'] = torch.cat(
+                (preds_dict[0]['reg'], preds_dict[0]['height'],
+                 preds_dict[0]['dim'], preds_dict[0]['rot'],
+                 preds_dict[0]['vel']),
+                dim=1)
 
             # Regression loss for dimension, offset, height, rotation
             ind = inds[task_id]
@@ -767,9 +747,9 @@ class CenterHead(BaseModule):
         for i, (box_preds, cls_preds, cls_labels) in enumerate(
                 zip(batch_reg_preds, batch_cls_preds, batch_cls_labels)):
 
-            # Apply NMS in bird eye view
+            # Apply NMS in birdeye view
 
-            # get the highest score per prediction, then apply nms
+            # get highest score per prediction, than apply nms
             # to remove overlapped box.
             if num_class_with_bg == 1:
                 top_scores = cls_preds.squeeze(-1)
@@ -798,7 +778,7 @@ class CenterHead(BaseModule):
                     box_preds[:, :], self.bbox_coder.code_size).bev)
                 # the nms in 3d detection just remove overlap boxes.
 
-                selected = nms_bev(
+                selected = nms_gpu(
                     boxes_for_nms,
                     top_scores,
                     thresh=self.test_cfg['nms_thr'],

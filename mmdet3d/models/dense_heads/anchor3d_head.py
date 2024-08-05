@@ -8,7 +8,8 @@ from mmdet3d.core import (PseudoSampler, box3d_multiclass_nms, limit_period,
                           xywhr2xyxyr)
 from mmdet.core import (build_assigner, build_bbox_coder,
                         build_prior_generator, build_sampler, multi_apply)
-from ..builder import HEADS, build_loss
+from mmdet.models import HEADS
+from ..builder import build_loss
 from .train_mixins import AnchorTrainMixin
 
 

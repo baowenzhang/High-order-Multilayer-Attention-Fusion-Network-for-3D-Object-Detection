@@ -2,24 +2,18 @@
 import numpy as np
 import torch
 from mmcv.cnn import ConvModule, normal_init
-
-from mmdet3d.ops.spconv import IS_SPCONV2_AVAILABLE
-
-if IS_SPCONV2_AVAILABLE:
-    from spconv.pytorch import (SparseConvTensor, SparseMaxPool3d,
-                                SparseSequential)
-else:
-    from mmcv.ops import SparseConvTensor, SparseMaxPool3d, SparseSequential
-
+from mmcv.ops import SparseConvTensor, SparseMaxPool3d, SparseSequential
+from mmcv.ops import nms_bev as nms_gpu
+from mmcv.ops import nms_normal_bev as nms_normal_gpu
 from mmcv.runner import BaseModule
 from torch import nn as nn
 
 from mmdet3d.core.bbox.structures import (LiDARInstance3DBoxes,
                                           rotation_3d_in_axis, xywhr2xyxyr)
-from mmdet3d.core.post_processing import nms_bev, nms_normal_bev
-from mmdet3d.models.builder import HEADS, build_loss
+from mmdet3d.models.builder import build_loss
 from mmdet3d.ops import make_sparse_convmodule
 from mmdet.core import build_bbox_coder, multi_apply
+from mmdet.models import HEADS
 
 
 @HEADS.register_module()
@@ -260,7 +254,7 @@ class PartA2BboxHead(BaseModule):
                                    sparse_idx[:, 2], sparse_idx[:, 3]]
         seg_features = seg_feats[sparse_idx[:, 0], sparse_idx[:, 1],
                                  sparse_idx[:, 2], sparse_idx[:, 3]]
-        coords = sparse_idx.int().contiguous()
+        coords = sparse_idx.int()
         part_features = SparseConvTensor(part_features, coords, sparse_shape,
                                          rcnn_batch_size)
         seg_features = SparseConvTensor(seg_features, coords, sparse_shape,
@@ -588,9 +582,9 @@ class PartA2BboxHead(BaseModule):
             torch.Tensor: Selected indices.
         """
         if use_rotate_nms:
-            nms_func = nms_bev
+            nms_func = nms_gpu
         else:
-            nms_func = nms_normal_bev
+            nms_func = nms_normal_gpu
 
         assert box_probs.shape[
             1] == self.num_classes, f'box_probs shape: {str(box_probs.shape)}'

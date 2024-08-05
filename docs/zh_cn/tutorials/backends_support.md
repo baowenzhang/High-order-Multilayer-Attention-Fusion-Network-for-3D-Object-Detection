@@ -1,5 +1,4 @@
-# 教程 7: 后端支持
-
+# Tutorial 7: 后端支持
 我们支持不同的文件客户端后端：磁盘、Ceph 和 LMDB 等。下面是修改配置使之从 Ceph 加载和保存数据的示例。
 
 ## 从 Ceph 读取数据和标注文件
@@ -94,8 +93,9 @@ data = dict(
     test=dict(pipeline=test_pipeline, classes=class_names, file_client_args=file_client_args))
 ```
 
-## 从 Ceph 读取预训练模型
 
+
+## 从 Ceph 读取预训练模型
 ```python
 model = dict(
     pts_backbone=dict(
@@ -108,10 +108,9 @@ model = dict(
 ```
 
 ## 从 Ceph 读取模型权重文件
-
 ```python
 # replace the path with your checkpoint path on Ceph
-load_from = 's3://openmmlab/checkpoints/mmdetection3d/v0.1.0_models/pointpillars/hv_pointpillars_secfpn_6x8_160e_kitti-3d-car/hv_pointpillars_secfpn_6x8_160e_kitti-3d-car_20200620_230614-77663cd6.pth'
+load_from = 's3://openmmlab/checkpoints/mmdetection3d/v0.1.0_models/pointpillars/hv_pointpillars_secfpn_6x8_160e_kitti-3d-car/hv_pointpillars_secfpn_6x8_160e_kitti-3d-car_20200620_230614-77663cd6.pth.pth'
 resume_from = None
 workflow = [('train', 1)]
 ```
@@ -132,7 +131,6 @@ evaluation = dict(interval=1, save_best='bbox', out_dir='s3://openmmlab/mmdetect
 ```
 
 ## 训练日志保存至 Ceph
-
 训练后的训练日志会备份到指定的 Ceph 路径。
 
 ```python
@@ -142,13 +140,12 @@ log_config = dict(
         dict(type='TextLoggerHook', out_dir='s3://openmmlab/mmdetection3d'),
     ])
 ```
-
 您还可以通过设置 `keep_local = False` 备份到指定的 Ceph 路径后删除本地训练日志。
 
 ```python
 log_config = dict(
     interval=50,
     hooks=[
-        dict(type='TextLoggerHook', out_dir='s3://openmmlab/mmdetection3d', keep_local=False),
+        dict(type='TextLoggerHook', out_dir='s3://openmmlab/mmdetection3d'', keep_local=False),
     ])
 ```

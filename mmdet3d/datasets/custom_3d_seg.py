@@ -7,8 +7,8 @@ import mmcv
 import numpy as np
 from torch.utils.data import Dataset
 
+from mmdet.datasets import DATASETS
 from mmseg.datasets import DATASETS as SEG_DATASETS
-from .builder import DATASETS
 from .pipelines import Compose
 from .utils import extract_result_dict, get_loading_pipeline
 
@@ -276,8 +276,7 @@ class Custom3DSegDataset(Dataset):
         if scene_idxs is None:
             scene_idxs = np.arange(len(self.data_infos))
         if isinstance(scene_idxs, str):
-            with self.file_client.get_local_path(scene_idxs) as local_path:
-                scene_idxs = np.load(local_path)
+            scene_idxs = np.load(scene_idxs)
         else:
             scene_idxs = np.array(scene_idxs)
 
@@ -357,7 +356,7 @@ class Custom3DSegDataset(Dataset):
             logger=logger)
 
         if show:
-            self.show(results, out_dir, pipeline=pipeline)
+            self.show(pred_sem_masks, out_dir, pipeline=pipeline)
 
         return ret_dict
 

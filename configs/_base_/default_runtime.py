@@ -1,4 +1,4 @@
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=1)#每1个epoch保存一次日志，很占空间 可以改大些
 # yapf:disable push
 # By default we use textlogger hook and tensorboard
 # For more loggers see
@@ -13,7 +13,7 @@ log_config = dict(
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = None
-load_from = None
+load_from = None#从哪里加载模型
 resume_from = None
 workflow = [('train', 1)]
 

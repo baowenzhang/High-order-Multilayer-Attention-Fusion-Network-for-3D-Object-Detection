@@ -7,9 +7,9 @@ import numpy as np
 import pyquaternion
 from nuscenes.utils.data_classes import Box as NuScenesBox
 
+from mmdet.datasets import DATASETS
 from ..core import show_result
 from ..core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
-from .builder import DATASETS
 from .custom_3d import Custom3DDataset
 from .pipelines import Compose
 
@@ -125,7 +125,8 @@ class NuScenesDataset(Custom3DDataset):
                  filter_empty_gt=True,
                  test_mode=False,
                  eval_version='detection_cvpr_2019',
-                 use_valid_flag=False):
+                 use_valid_flag=False,
+                 **kwargs):
         self.load_interval = load_interval
         self.use_valid_flag = use_valid_flag
         super().__init__(
@@ -136,7 +137,8 @@ class NuScenesDataset(Custom3DDataset):
             modality=modality,
             box_type_3d=box_type_3d,
             filter_empty_gt=filter_empty_gt,
-            test_mode=test_mode)
+            test_mode=test_mode,
+            **kwargs)
 
         self.with_velocity = with_velocity
         self.eval_version = eval_version
@@ -184,6 +186,7 @@ class NuScenesDataset(Custom3DDataset):
         Returns:
             list[dict]: List of annotations sorted by timestamps.
         """
+        # loading data from a file-like object needs file format
         data = mmcv.load(ann_file, file_format='pkl')
         data_infos = list(sorted(data['infos'], key=lambda e: e['timestamp']))
         data_infos = data_infos[::self.load_interval]
@@ -316,7 +319,7 @@ class NuScenesDataset(Custom3DDataset):
         print('Start to convert detection format...')
         for sample_id, det in enumerate(mmcv.track_iter_progress(results)):
             annos = []
-            boxes = output_to_nusc_box(det, self.with_velocity)
+            boxes = output_to_nusc_box(det)
             sample_token = self.data_infos[sample_id]['token']
             boxes = lidar_nusc_box_to_global(self.data_infos[sample_id], boxes,
                                              mapped_class_names,
@@ -573,7 +576,7 @@ class NuScenesDataset(Custom3DDataset):
                         file_name, show)
 
 
-def output_to_nusc_box(detection, with_velocity=True):
+def output_to_nusc_box(detection):
     """Convert the output to the box class in the nuScenes.
 
     Args:
@@ -600,10 +603,7 @@ def output_to_nusc_box(detection, with_velocity=True):
     box_list = []
     for i in range(len(box3d)):
         quat = pyquaternion.Quaternion(axis=[0, 0, 1], radians=box_yaw[i])
-        if with_velocity:
-            velocity = (*box3d.tensor[i, 7:9], 0.0)
-        else:
-            velocity = (0, 0, 0)
+        velocity = (*box3d.tensor[i, 7:9], 0.0)
         # velo_val = np.linalg.norm(box3d[i, 7:9])
         # velo_ori = box3d[i, 6]
         # velocity = (

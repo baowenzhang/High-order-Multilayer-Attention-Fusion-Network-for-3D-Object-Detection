@@ -24,7 +24,7 @@ model = dict(
     pts_middle_encoder=dict(
         type='PointPillarsScatter', in_channels=64, output_shape=[400, 400]),
     pts_backbone=dict(
-        type='SECOND',
+        type='SECOND',##提特征
         in_channels=64,
         norm_cfg=dict(type='naiveSyncBN2d', eps=1e-3, momentum=0.01),
         layer_nums=[3, 5, 5],
@@ -41,7 +41,7 @@ model = dict(
     pts_bbox_head=dict(
         type='Anchor3DHead',
         num_classes=10,
-        in_channels=256,
+        in_channels=256,#in_channels=neck中out_channels
         feat_channels=256,
         use_direction_classifier=True,
         anchor_generator=dict(

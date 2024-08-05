@@ -7,7 +7,7 @@ from mmcv.runner import force_fp32
 from torch import nn as nn
 
 from mmdet.core import multi_apply
-from ..builder import HEADS, build_loss
+from mmdet.models.builder import HEADS, build_loss
 from .base_mono3d_dense_head import BaseMono3DDenseHead
 
 

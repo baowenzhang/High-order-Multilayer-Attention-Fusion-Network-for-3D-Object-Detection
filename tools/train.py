@@ -29,7 +29,7 @@ try:
 except ImportError:
     from mmdet3d.utils import setup_multi_processes
 
-
+#E:\deeplearn-workspace\GuPao\MMDetection3d\mmdetection3d-master\configs\pointpillars\hv_pointpillars_secfpn_6x8_160e_kitti-3d-3class.py
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a detector')
     parser.add_argument('config', help='train config file path')
@@ -201,6 +201,8 @@ def main():
                 dash_line)
     meta['env_info'] = env_info
     meta['config'] = cfg.pretty_text
+    cfg.device='cuda'
+
 
     # log some basic info
     logger.info(f'Distributed training: {distributed}')

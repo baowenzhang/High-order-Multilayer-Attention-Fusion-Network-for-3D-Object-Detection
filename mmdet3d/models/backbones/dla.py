@@ -5,8 +5,8 @@ import torch
 from mmcv.cnn import build_conv_layer, build_norm_layer
 from mmcv.runner import BaseModule
 from torch import nn
-
-from ..builder import BACKBONES
+import torch.nn.functional as F
+from mmdet.models.builder import BACKBONES
 
 
 def dla_build_norm_layer(cfg, num_features):
@@ -35,7 +35,7 @@ def dla_build_norm_layer(cfg, num_features):
     else:
         return build_norm_layer(cfg_, num_features)
 
-
+@BACKBONES.register_module()
 class BasicBlock(BaseModule):
     """BasicBlock in DLANet.
 
@@ -92,8 +92,14 @@ class BasicBlock(BaseModule):
         out = self.conv1(x)
         out = self.norm1(out)
         out = self.relu(out)
+        print(out.shape)
         out = self.conv2(out)
+        print(out.shape)
         out = self.norm2(out)
+        print(identity.shape)
+        print(out.shape)
+        if out.shape[-1] != identity.shape[-1]:
+            identity=F.interpolate(identity,size=out.shape[-2:],mode='bilinear')
         out += identity
         out = self.relu(out)
 
@@ -145,8 +151,19 @@ class Root(BaseModule):
                 multiple layers.
         """
         children = feat_list
+        for i in range(len(feat_list)):
+            shape = feat_list[0].shape
+            feat_list[i]=F.interpolate(children[i],size=shape[-2:],mode='bilinear')
+
         x = self.conv(torch.cat(feat_list, 1))
         x = self.norm(x)
+
+
+        #print(len(x))
+        #print(len(children))
+        if x.shape[-1] != children[0].shape[-1]:
+            children[0]=F.interpolate(children[0],size=x.shape[-2:],mode='bilinear')
+
         if self.add_identity:
             x += children[0]
         x = self.relu(x)

@@ -1,6 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from mmdet.datasets.builder import build_dataloader
-from .builder import DATASETS, PIPELINES, build_dataset
+from .builder import DATASETS, build_dataset
 from .custom_3d import Custom3DDataset
 from .custom_3d_seg import Custom3DSegDataset
 from .kitti_dataset import KittiDataset
@@ -13,12 +13,11 @@ from .pipelines import (AffineResize, BackgroundPointsFilter, GlobalAlignment,
                         GlobalRotScaleTrans, IndoorPatchPointSample,
                         IndoorPointSample, LoadAnnotations3D,
                         LoadPointsFromDict, LoadPointsFromFile,
-                        LoadPointsFromMultiSweeps, MultiViewWrapper,
-                        NormalizePointsColor, ObjectNameFilter, ObjectNoise,
-                        ObjectRangeFilter, ObjectSample, PointSample,
-                        PointShuffle, PointsRangeFilter, RandomDropPointsColor,
-                        RandomFlip3D, RandomJitterPoints, RandomRotate,
-                        RandomShiftScale, RangeLimitedRandomCrop,
+                        LoadPointsFromMultiSweeps, NormalizePointsColor,
+                        ObjectNameFilter, ObjectNoise, ObjectRangeFilter,
+                        ObjectSample, PointSample, PointShuffle,
+                        PointsRangeFilter, RandomDropPointsColor, RandomFlip3D,
+                        RandomJitterPoints, RandomShiftScale,
                         VoxelBasedPointSampler)
 # yapf: enable
 from .s3dis_dataset import S3DISDataset, S3DISSegDataset
@@ -42,6 +41,5 @@ __all__ = [
     'LoadPointsFromMultiSweeps', 'WaymoDataset', 'BackgroundPointsFilter',
     'VoxelBasedPointSampler', 'get_loading_pipeline', 'RandomDropPointsColor',
     'RandomJitterPoints', 'ObjectNameFilter', 'AffineResize',
-    'RandomShiftScale', 'LoadPointsFromDict', 'PIPELINES',
-    'RangeLimitedRandomCrop', 'RandomRotate', 'MultiViewWrapper'
+    'RandomShiftScale', 'LoadPointsFromDict'
 ]

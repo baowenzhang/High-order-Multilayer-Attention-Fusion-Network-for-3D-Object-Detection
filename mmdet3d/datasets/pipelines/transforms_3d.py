@@ -10,9 +10,9 @@ from mmcv.utils import build_from_cfg
 from mmdet3d.core import VoxelGenerator
 from mmdet3d.core.bbox import (CameraInstance3DBoxes, DepthInstance3DBoxes,
                                LiDARInstance3DBoxes, box_np_ops)
-from mmdet3d.datasets.pipelines.compose import Compose
-from mmdet.datasets.pipelines import RandomCrop, RandomFlip, Rotate
-from ..builder import OBJECTSAMPLERS, PIPELINES
+from mmdet.datasets.builder import PIPELINES
+from mmdet.datasets.pipelines import RandomFlip
+from ..builder import OBJECTSAMPLERS
 from .data_augment_utils import noise_per_object_v3_
 
 
@@ -68,7 +68,7 @@ class RandomDropPointsColor(object):
 
 @PIPELINES.register_module()
 class RandomFlip3D(RandomFlip):
-    """Flip the points & bbox.
+    """Flip the points & bbox.##翻转点和框
 
     If the input dict contains the key "flip", then the flag will be used,
     otherwise it will be randomly decided by a ratio specified in the init
@@ -192,170 +192,8 @@ class RandomFlip3D(RandomFlip):
 
 
 @PIPELINES.register_module()
-class MultiViewWrapper(object):
-    """Wrap transformation from single-view into multi-view.
-
-    The wrapper processes the images from multi-view one by one. For each
-    image, it constructs a pseudo dict according to the keys specified by the
-    'process_fields' parameter. After the transformation is finished, desired
-    information can be collected by specifying the keys in the 'collected_keys'
-    parameter. Multi-view images share the same transformation parameters
-    but do not share the same magnitude when a random transformation is
-    conducted.
-
-    Args:
-        transforms (list[dict]): A list of dict specifying the transformations
-            for the monocular situation.
-        process_fields (dict): Desired keys that the transformations should
-            be conducted on. Default to dict(img_fields=['img']).
-        collected_keys (list[str]): Collect information in transformation
-            like rotate angles, crop roi, and flip state.
-    """
-
-    def __init__(self,
-                 transforms,
-                 process_fields=dict(img_fields=['img']),
-                 collected_keys=[]):
-        self.transform = Compose(transforms)
-        self.collected_keys = collected_keys
-        self.process_fields = process_fields
-
-    def __call__(self, input_dict):
-        for key in self.collected_keys:
-            input_dict[key] = []
-        for img_id in range(len(input_dict['img'])):
-            process_dict = self.process_fields.copy()
-            for field in self.process_fields:
-                for key in self.process_fields[field]:
-                    process_dict[key] = input_dict[key][img_id]
-            process_dict = self.transform(process_dict)
-            for field in self.process_fields:
-                for key in self.process_fields[field]:
-                    input_dict[key][img_id] = process_dict[key]
-            for key in self.collected_keys:
-                input_dict[key].append(process_dict[key])
-        return input_dict
-
-
-@PIPELINES.register_module()
-class RangeLimitedRandomCrop(RandomCrop):
-    """Randomly crop image-view objects under a limitation of range.
-
-    Args:
-        relative_x_offset_range (tuple[float]): Relative range of random crop
-            in x direction. (x_min, x_max) in [0, 1.0]. Default to (0.0, 1.0).
-        relative_y_offset_range (tuple[float]): Relative range of random crop
-            in y direction. (y_min, y_max) in [0, 1.0]. Default to (0.0, 1.0).
-    """
-
-    def __init__(self,
-                 relative_x_offset_range=(0.0, 1.0),
-                 relative_y_offset_range=(0.0, 1.0),
-                 **kwargs):
-        super(RangeLimitedRandomCrop, self).__init__(**kwargs)
-        for range in [relative_x_offset_range, relative_y_offset_range]:
-            assert 0 <= range[0] <= range[1] <= 1
-        self.relative_x_offset_range = relative_x_offset_range
-        self.relative_y_offset_range = relative_y_offset_range
-
-    def _crop_data(self, results, crop_size, allow_negative_crop):
-        """Function to randomly crop images.
-
-        Modified from RandomCrop in mmdet==2.25.0
-
-        Args:
-            results (dict): Result dict from loading pipeline.
-            crop_size (tuple): Expected absolute size after cropping, (h, w).
-
-        Returns:
-            dict: Randomly cropped results, 'img_shape' key in result dict is
-                updated according to crop size.
-        """
-        assert crop_size[0] > 0 and crop_size[1] > 0
-        for key in results.get('img_fields', ['img']):
-            img = results[key]
-            margin_h = max(img.shape[0] - crop_size[0], 0)
-            margin_w = max(img.shape[1] - crop_size[1], 0)
-            offset_range_h = (margin_h * self.relative_y_offset_range[0],
-                              margin_h * self.relative_y_offset_range[1] + 1)
-            offset_h = np.random.randint(*offset_range_h)
-            offset_range_w = (margin_w * self.relative_x_offset_range[0],
-                              margin_w * self.relative_x_offset_range[1] + 1)
-            offset_w = np.random.randint(*offset_range_w)
-            crop_y1, crop_y2 = offset_h, offset_h + crop_size[0]
-            crop_x1, crop_x2 = offset_w, offset_w + crop_size[1]
-
-            # crop the image
-            img = img[crop_y1:crop_y2, crop_x1:crop_x2, ...]
-            img_shape = img.shape
-            results[key] = img
-            results['crop'] = (crop_x1, crop_y1, crop_x2, crop_y2)
-        results['img_shape'] = img_shape
-
-        # crop bboxes accordingly and clip to the image boundary
-        for key in results.get('bbox_fields', []):
-            # e.g. gt_bboxes and gt_bboxes_ignore
-            bbox_offset = np.array([offset_w, offset_h, offset_w, offset_h],
-                                   dtype=np.float32)
-            bboxes = results[key] - bbox_offset
-            if self.bbox_clip_border:
-                bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, img_shape[1])
-                bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, img_shape[0])
-            valid_inds = (bboxes[:, 2] > bboxes[:, 0]) & (
-                bboxes[:, 3] > bboxes[:, 1])
-            # If the crop does not contain any gt-bbox area and
-            # allow_negative_crop is False, skip this image.
-            if (key == 'gt_bboxes' and not valid_inds.any()
-                    and not allow_negative_crop):
-                return None
-            results[key] = bboxes[valid_inds, :]
-            # label fields. e.g. gt_labels and gt_labels_ignore
-            label_key = self.bbox2label.get(key)
-            if label_key in results:
-                results[label_key] = results[label_key][valid_inds]
-
-            # mask fields, e.g. gt_masks and gt_masks_ignore
-            mask_key = self.bbox2mask.get(key)
-            if mask_key in results:
-                results[mask_key] = results[mask_key][
-                    valid_inds.nonzero()[0]].crop(
-                        np.asarray([crop_x1, crop_y1, crop_x2, crop_y2]))
-                if self.recompute_bbox:
-                    results[key] = results[mask_key].get_bboxes()
-
-        # crop semantic seg
-        for key in results.get('seg_fields', []):
-            results[key] = results[key][crop_y1:crop_y2, crop_x1:crop_x2]
-
-        return results
-
-
-@PIPELINES.register_module()
-class RandomRotate(Rotate):
-    """Randomly rotate images.
-
-    The ratation angle is selected uniformly within the interval specified by
-    the 'range'  parameter.
-
-    Args:
-        range (tuple[float]): Define the range of random rotation.
-            (angle_min, angle_max) in angle.
-    """
-
-    def __init__(self, range, **kwargs):
-        super(RandomRotate, self).__init__(**kwargs)
-        self.range = range
-
-    def __call__(self, results):
-        self.angle = np.random.uniform(self.range[0], self.range[1])
-        super(RandomRotate, self).__call__(results)
-        results['rotate'] = self.angle
-        return results
-
-
-@PIPELINES.register_module()
 class RandomJitterPoints(object):
-    """Randomly jitter point coordinates.
+    """Randomly jitter point coordinates.##随机抖动点坐标
 
     Different from the global translation in ``GlobalRotScaleTrans``, here we
         apply different noises to each point in a scene.
@@ -422,7 +260,7 @@ class RandomJitterPoints(object):
 
 
 @PIPELINES.register_module()
-class ObjectSample(object):
+class ObjectSample(object): #对数据采样
     """Sample GT objects to the data.
 
     Args:
@@ -538,7 +376,7 @@ class ObjectSample(object):
 
 @PIPELINES.register_module()
 class ObjectNoise(object):
-    """Apply noise to each GT objects in the scene.
+    """Apply noise to each GT objects in the scene.##对场景中的每个GT对象应用噪声
 
     Args:
         translation_std (list[float], optional): Standard deviation of the
@@ -604,7 +442,7 @@ class ObjectNoise(object):
 @PIPELINES.register_module()
 class GlobalAlignment(object):
     """Apply global alignment to 3D scene points by rotation and translation.
-
+  ###通过旋转和平移对3D场景点应用全局对齐。
     Args:
         rotation_axis (int): Rotation axis for points and bboxes rotation.
 
@@ -691,7 +529,7 @@ class GlobalAlignment(object):
 @PIPELINES.register_module()
 class GlobalRotScaleTrans(object):
     """Apply global rotation, scaling and translation to a 3D scene.
-
+    ###在3D场景中应用全局旋转、缩放和平移。
     Args:
         rot_range (list[float], optional): Range of rotation angle.
             Defaults to [-0.78539816, 0.78539816] (close to [-pi/4, pi/4]).
@@ -856,7 +694,7 @@ class GlobalRotScaleTrans(object):
 
 @PIPELINES.register_module()
 class PointShuffle(object):
-    """Shuffle input points."""
+    """Shuffle input points."""  ###洗牌输入点
 
     def __call__(self, input_dict):
         """Call function to shuffle points.
@@ -889,7 +727,7 @@ class PointShuffle(object):
 @PIPELINES.register_module()
 class ObjectRangeFilter(object):
     """Filter objects by the range.
-
+   #按范围过滤对象
     Args:
         point_cloud_range (list[float]): Point cloud range.
     """
@@ -1022,7 +860,7 @@ class ObjectNameFilter(object):
 
 @PIPELINES.register_module()
 class PointSample(object):
-    """Point sample.
+    """Point sample.##定点采样
 
     Sampling data to a certain number.
 

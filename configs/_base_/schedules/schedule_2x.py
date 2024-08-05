@@ -1,8 +1,8 @@
 # optimizer
 # This schedule is mainly used by models on nuScenes dataset
-optimizer = dict(type='AdamW', lr=0.001, weight_decay=0.01)
+optimizer = dict(type='AdamW', lr=0.001, weight_decay=0.01)#优化器
 # max_norm=10 is better for SECOND
-optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))#梯度衰减
 lr_config = dict(
     policy='step',
     warmup='linear',

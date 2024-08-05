@@ -11,18 +11,17 @@ from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
                          wrap_fp16_model)
 
-import mmdet
 from mmdet3d.apis import single_gpu_test
 from mmdet3d.datasets import build_dataloader, build_dataset
 from mmdet3d.models import build_model
 from mmdet.apis import multi_gpu_test, set_random_seed
 from mmdet.datasets import replace_ImageToTensor
 
-if mmdet.__version__ > '2.23.0':
-    # If mmdet version > 2.23.0, setup_multi_processes would be imported and
+try:
+    # If mmdet version > 2.20.0, setup_multi_processes would be imported and
     # used from mmdet instead of mmdet3d.
     from mmdet.utils import setup_multi_processes
-else:
+except ImportError:
     from mmdet3d.utils import setup_multi_processes
 
 try:

@@ -9,7 +9,7 @@ from mmdet3d.core.bbox.structures import (get_proj_mat_by_coord_type,
                                           points_cam2img)
 from ..builder import FUSION_LAYERS
 from . import apply_3d_transformation
-
+import math
 
 def point_sample(img_meta,
                  img_features,
@@ -58,7 +58,7 @@ def point_sample(img_meta,
 
     # project points to camera coordinate
     pts_2d = points_cam2img(points, proj_mat)
-
+    #点云投影到图像中得到的2D位置，proj_mat映射矩阵4*4
     # img transformation: scale -> crop -> flip
     # the image is resized by img_scale_factor
     img_coors = pts_2d[:, 0:2] * img_scale_factor  # Nx2
@@ -74,7 +74,7 @@ def point_sample(img_meta,
         coor_x = orig_w - coor_x
 
     h, w = img_pad_shape
-    coor_y = coor_y / h * 2 - 1
+    coor_y = coor_y / h * 2 - 1  #对2D位置做预处理操作，归一化（-1，1）
     coor_x = coor_x / w * 2 - 1
     grid = torch.cat([coor_x, coor_y],
                      dim=1).unsqueeze(0).unsqueeze(0)  # Nx2 -> 1x1xNx2
@@ -144,7 +144,8 @@ class PointFusion(BaseModule):
                  aligned=True,
                  align_corners=True,
                  padding_mode='zeros',
-                 lateral_conv=True):
+                 lateral_conv=True,
+                 b=1,gama=2):
         super(PointFusion, self).__init__(init_cfg=init_cfg)
         if isinstance(img_levels, int):
             img_levels = [img_levels]
@@ -206,6 +207,50 @@ class PointFusion(BaseModule):
                 dict(type='Xavier', layer='Conv2d', distribution='uniform'),
                 dict(type='Xavier', layer='Linear', distribution='uniform')
             ]
+        ######   High-Order 
+        kernel_size=3
+        stride=1
+        padding = (kernel_size-stride)// 2
+        self.conv_fusion = nn.Sequential(
+            nn.Conv2d(in_channels=2,out_channels=16,kernel_size=kernel_size,
+                              bias=False, padding=padding,stride=stride),#16*8*8
+            nn.BatchNorm2d(16,eps=0.001,momentum=0.01),
+            nn.ReLU(inplace=True),
+             
+            nn.Conv2d(in_channels=16,out_channels=32,kernel_size=kernel_size,
+                              bias=False, padding=padding,stride=stride),#32*8*8
+#             nn.BatchNorm(32,eps=0.001,momentum=0.01,affine=True),
+            nn.BatchNorm2d(32,eps=0.001,momentum=0.01),
+            nn.ReLU(inplace=True),
+             
+            nn.Conv2d(in_channels=32,out_channels=2,kernel_size=kernel_size,
+                              bias=False, padding=padding,stride=stride),#64*8*8
+            nn.BatchNorm2d(2,eps=0.001,momentum=0.01),
+            nn.ReLU(inplace=True),
+            
+        )
+        
+        self.Sigmoid=nn.Sigmoid()
+        self.max_pooling_att = nn.Sequential(
+            nn.MaxPool2d(5, 1, padding=2),
+            
+        )
+        self.global_avg_att = nn.Sequential(
+            nn.AvgPool2d(5, 1, padding=2),
+        
+        )
+        
+
+        self.MLP=nn.Sequential(
+            nn.Linear(128,64),
+            
+            nn.ReLU(inplace=True),
+            nn.Linear(64, 128),
+            
+            nn.Sigmoid(),
+        )
+
+
 
     def forward(self, img_feats, pts, pts_feats, img_metas):
         """Forward function.
@@ -221,12 +266,41 @@ class PointFusion(BaseModule):
             torch.Tensor: Fused features of each point.
         """
         img_pts = self.obtain_mlvl_feats(img_feats, pts, img_metas)
+        #点的RGB特征
         img_pre_fuse = self.img_transform(img_pts)
         if self.training and self.dropout_ratio > 0:
-            img_pre_fuse = F.dropout(img_pre_fuse, self.dropout_ratio)
+            img_pre_fuse = F.dropout(img_pre_fuse, self.dropout_ratio)#128维
         pts_pre_fuse = self.pts_transform(pts_feats)
 
-        fuse_out = img_pre_fuse + pts_pre_fuse
+        fuse_out_init = img_pre_fuse + pts_pre_fuse
+
+        fuse_out_init1=fuse_out_init.view(-1,2,8,8)
+        fuse_out_conv=self.conv_fusion(fuse_out_init1)#(2,8,8)
+
+        fuse_out_conv = fuse_out_conv.view(-1, 2*8*8)
+        fuse_out_conv_wei=self.Sigmoid(fuse_out_conv)
+
+        fuse_out_att=fuse_out_conv_wei*fuse_out_init
+
+        
+        fuse_out_att1=fuse_out_att.view(-1,2,8,8)
+    
+        fuse_out_max=self.max_pooling_att(fuse_out_att1)
+        fuse_out_max1 = fuse_out_max.view(-1, 2*8*8)
+        max_weight=self.MLP(fuse_out_max1)
+        fuse_out_max_att=max_weight*fuse_out_max1
+
+        fuse_out_global=self.global_avg_att(fuse_out_att1)
+        fuse_out_global1 = fuse_out_global.view(-1, 2*8*8)
+        global_weight=self.MLP(fuse_out_global1)
+        fuse_out_global_att=global_weight*fuse_out_global1
+
+        fuse_out_att_weight=self.MLP(fuse_out_att)
+        fuse_out_w_att=fuse_out_att_weight*fuse_out_att
+  
+        fuse_out=fuse_out_max_att+fuse_out_global_att+fuse_out_w_att       
+        ###
+
         if self.activate_out:
             fuse_out = F.relu(fuse_out)
         if self.fuse_out:
@@ -234,7 +308,7 @@ class PointFusion(BaseModule):
 
         return fuse_out
 
-    def obtain_mlvl_feats(self, img_feats, pts, img_metas):
+    def obtain_mlvl_feats(self, img_feats, pts, img_metas):#每个点获取多层级图像特征
         """Obtain multi-level features for each point.
 
         Args:
